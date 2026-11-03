@@ -1,0 +1,34 @@
+name: Claude intraday pot (paper)
+
+on:
+  schedule:
+    # Every 5 min, 9:45 AM - 3:15 PM ET on weekdays (~67 runs/day, fits GitHub's free 2,000 min/month).
+    # Times are UTC and set for EASTERN STANDARD TIME (Nov-Mar). When clocks spring forward
+    # (Mar 8, 2027), subtract 1 from each hour: 13 / 14-18 / 19.
+    # GitHub can delay scheduled runs by a few minutes.
+    - cron: "45-55/5 14 * * 1-5"
+    - cron: "*/5 15-19 * * 1-5"
+    - cron: "0-15/5 20 * * 1-5"
+  workflow_dispatch: {}
+
+concurrency:
+  group: intraday
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Skip outside 9:45 AM - 3:15 PM ET
+        id: window
+        run: |
+          t=$(TZ=America/New_York date +%H%M)
+          if [ "$t" -ge 0940 ] && [ "$t" -le 1520 ]; then echo "go=1" >> "$GITHUB_OUTPUT"; else echo "Outside window ($t ET)"; fi
+      - name: Run intraday bot
+        if: steps.window.outputs.go == '1'
+        env:
+          APCA_API_KEY_ID: ${{ secrets.APCA_API_KEY_ID }}
+          APCA_API_SECRET_KEY: ${{ secrets.APCA_API_SECRET_KEY }}
+        run: python3 intraday.py
